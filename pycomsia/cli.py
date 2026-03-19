@@ -85,6 +85,11 @@ FIELD_OPTIONS = {
     help='Disable visualization (default: False)'
 )
 @click.option(
+    '--protein-file', '-P',
+    type=click.Path(exists=True),
+    help='Optional protein structure file (PDB/mmCIF) to include in the PyMOL session.'
+)
+@click.option(
     '--output-dir', '-o',
     required=True,
     type=click.Path(),
@@ -92,7 +97,7 @@ FIELD_OPTIONS = {
 )
 @click.version_option()
 def main(train_file, predict_file, sdf_activity, grid_resolution, grid_padding, 
-         fields, num_components, column_filter, disable_visualization, output_dir):
+         fields, num_components, column_filter, disable_visualization, protein_file, output_dir):
     """Run PyCoMSIA molecular field analysis.
     
     PyCoMSIA performs Comparative Molecular Similarity Indices Analysis (CoMSIA)
@@ -134,6 +139,8 @@ def main(train_file, predict_file, sdf_activity, grid_resolution, grid_padding,
     click.echo(f"⚗️  Fields: {fields} ({', '.join(FIELD_OPTIONS[fields])})")
     click.echo(f"🔬 Grid resolution: {grid_resolution}")
     click.echo(f"📊 Components: {num_components}")
+    if protein_file:
+        click.echo(f"🧪 Protein file: {protein_file} — unexplored volumes will be mapped in contour plots")
     
     if not VISUALIZATION_AVAILABLE:
         click.echo("⚠️  Warning: Visualization dependencies not available. Install pyvista for 3D visualization.")
@@ -271,7 +278,8 @@ def main(train_file, predict_file, sdf_activity, grid_resolution, grid_padding,
             grid_dimensions=grid_dimensions,
             grid_origin=grid_origin,
             grid_spacing=grid_spacing,
-            significant_ranges=significant_ranges
+            significant_ranges=significant_ranges,
+            protein_file=protein_file
         )
     elif not disable_visualization and not VISUALIZATION_AVAILABLE:
         click.echo("⚠️  Contour plots requested but dependencies not available")

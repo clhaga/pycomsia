@@ -129,7 +129,7 @@ class ContourPlotVisualizer:
     
     def create_pymol_session(self, molecules, output_dir, session_name="pycomsia_ligands",
                            coefficients=None, grid_dimensions=None, grid_origin=None, 
-                           grid_spacing=None, significant_ranges=None):
+                           grid_spacing=None, significant_ranges=None, protein_file=None):
         """
         Create a PyMOL session file (.pse) containing all input ligands and contour plots.
         
@@ -142,6 +142,9 @@ class ContourPlotVisualizer:
             grid_origin: Grid origin coordinates
             grid_spacing: Grid spacing values
             significant_ranges: Significant value ranges for contours
+            protein_file: Optional path to a protein structure file (e.g. PDB) to include
+                          in the session. When provided the protein is loaded as a separate
+                          object and displayed as cartoon.
         """
         if not PYMOL_AVAILABLE:
             print("⚠️  PyMOL not available. Install pymol-open-source to create PyMOL sessions.")
@@ -177,6 +180,18 @@ class ContourPlotVisualizer:
                 
                 # Load molecules from SDF file
                 cmd.load(str(temp_sdf_file), "ligands")
+                
+                # Load optional protein structure
+                if protein_file is not None:
+                    protein_path = Path(protein_file)
+                    if not protein_path.exists():
+                        print(f"⚠️  Protein file not found, skipping: {protein_file}")
+                    else:
+                        cmd.load(str(protein_path), "protein")
+                        cmd.hide("everything", "protein")
+                        cmd.show("cartoon", "protein")
+                        cmd.color("grey80", "protein")
+                        print(f"✅ Protein loaded: {protein_path.name}")
                 
                 # Remove non-polar hydrogens (keep only polar hydrogens bonded to N, O, S)
                 cmd.remove("elem H and not (neighbor elem N+O+S)")
