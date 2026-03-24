@@ -226,19 +226,13 @@ class ContourPlotVisualizer:
                 cmd.remove("elem H and not (neighbor elem N+O+S)")
 
                 # Set all_states to 1 (show every ligand state / molecule)
-                cmd.set("all_states", 1)
+                # cmd.set("all_states", 1)
 
                 # Set display preferences
                 cmd.hide("everything", "ligands")
                 cmd.show("sticks", "ligands")
                 cmd.hide("lines", "ligands")  # Hide wires/wireframe
                 cmd.color("atomic", "ligands")
-
-                # Create a single-state reference copy of the ligand object.
-                # The global all_states=1 is overridden per-object so that
-                # 'ligands_ref' always shows only state 1 (first molecule).
-                cmd.copy("ligands_ref", "ligands")
-                cmd.set("all_states", 0, "ligands_ref")
 
                 # Restore protein display (the broad hide above would have cleared it)
                 if protein_loaded:
