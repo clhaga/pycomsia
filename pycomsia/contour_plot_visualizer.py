@@ -301,6 +301,9 @@ class ContourPlotVisualizer:
                 # Center and zoom on all molecules
                 cmd.center("ligands")
                 cmd.zoom("ligands", buffer=5.0)
+                cmd.hide(
+                    "nonbonded"
+                )  # keep contour fields only as surface; hides crosses
 
                 # Set background to white for better visibility
                 cmd.bg_color("white")
