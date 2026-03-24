@@ -48,9 +48,11 @@ class ContourPlotVisualizer:
             lo = (np.min(low_range), np.max(low_range))
             hi = (np.min(high_range), np.max(high_range))
             significant_ranges[field_name] = {"low": lo, "high": hi}
-            logger.debug(f"  {field_name}: low=[{lo[0]:.4f}, {lo[1]:.4f}]  "
-                         f"high=[{hi[0]:.4f}, {hi[1]:.4f}]  "
-                         f"(top/bottom {top_percent}%)")
+            logger.debug(
+                f"  {field_name}: low=[{lo[0]:.4f}, {lo[1]:.4f}]  "
+                f"high=[{hi[0]:.4f}, {hi[1]:.4f}]  "
+                f"(top/bottom {top_percent}%)"
+            )
 
         self.significant_ranges = significant_ranges
         return significant_ranges
@@ -206,7 +208,9 @@ class ContourPlotVisualizer:
                 if protein_file is not None:
                     protein_path = Path(protein_file)
                     if not protein_path.exists():
-                        logger.warning(f"Protein file not found, skipping: {protein_file}")
+                        logger.warning(
+                            f"Protein file not found, skipping: {protein_file}"
+                        )
                     else:
                         protein_object_name = protein_path.stem
                         cmd.load(str(protein_path), protein_object_name)
@@ -221,7 +225,7 @@ class ContourPlotVisualizer:
                 # Remove non-polar hydrogens (keep only polar hydrogens bonded to N, O, S)
                 cmd.remove("elem H and not (neighbor elem N+O+S)")
 
-                # Set all_states to 1
+                # Set all_states to 1 (show every ligand state / molecule)
                 cmd.set("all_states", 1)
 
                 # Set display preferences
@@ -229,6 +233,12 @@ class ContourPlotVisualizer:
                 cmd.show("sticks", "ligands")
                 cmd.hide("lines", "ligands")  # Hide wires/wireframe
                 cmd.color("atomic", "ligands")
+
+                # Create a single-state reference copy of the ligand object.
+                # The global all_states=1 is overridden per-object so that
+                # 'ligands_ref' always shows only state 1 (first molecule).
+                cmd.copy("ligands_ref", "ligands")
+                cmd.set("all_states", 0, "ligands_ref")
 
                 # Restore protein display (the broad hide above would have cleared it)
                 if protein_loaded:
@@ -666,9 +676,7 @@ class ContourPlotVisualizer:
         cmd.set("transparency", 0.7, tmp_name)
         cmd.set_name(tmp_name, object_name)
 
-        logger.debug(
-            f"Added {len(points)} {color} surface points as '{object_name}'"
-        )
+        logger.debug(f"Added {len(points)} {color} surface points as '{object_name}'")
 
     def _add_excluded_field_volumes_to_pymol(
         self,

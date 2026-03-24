@@ -2,9 +2,13 @@ import logging
 
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdDepictor, rdFMCS, rdDistGeom
-from rdkit.Chem.rdForceFieldHelpers import MMFFGetMoleculeProperties, MMFFGetMoleculeForceField
+from rdkit.Chem.rdForceFieldHelpers import (
+    MMFFGetMoleculeProperties,
+    MMFFGetMoleculeForceField,
+)
 
 logger = logging.getLogger(__name__)
+
 
 class MoleculeAligner:
     def __init__(self):
@@ -15,12 +19,12 @@ class MoleculeAligner:
         """
         ALIGNMENT DISABLED: Assuming SDF molecules are pre-aligned.
         This method now returns molecules without alignment.
-        
+
         Returns a list of tuples: (mol, is_training)
         """
         logger.info("Alignment disabled - using pre-aligned SDF molecules")
         return []  # Return empty list since SDF molecules are handled directly
-        
+
         # # COMMENTED OUT - Original alignment code
         # if not train_smiles_list:
         #     return []
@@ -30,11 +34,11 @@ class MoleculeAligner:
         # combined_data = [(smi, True) for smi in train_smiles_list]
         # if pred_smiles_list:
         #     combined_data.extend([(smi, False) for smi in pred_smiles_list])
-        # 
+        #
         # # Convert SMILES to molecules while preserving order
-        # mols_with_info = [(Chem.MolFromSmiles(smi), is_training) 
+        # mols_with_info = [(Chem.MolFromSmiles(smi), is_training)
         #                  for smi, is_training in combined_data]
-        # 
+        #
         # if not mols_with_info or any(mol[0] is None for mol in mols_with_info):
         #     print("Error: Invalid SMILES strings provided.")
         #     return []
@@ -61,7 +65,7 @@ class MoleculeAligner:
         # # Initialize results list with None values to maintain order
         # aligned_results = [(None, info[1]) for info in mols_with_info]
         # # Add template molecule to its correct position
-        # aligned_results[largest_mol_index] = (Chem.Mol(self.template), 
+        # aligned_results[largest_mol_index] = (Chem.Mol(self.template),
         #                                     mols_with_info[largest_mol_index][1])
 
         # print("Aligning molecules...")
@@ -69,7 +73,7 @@ class MoleculeAligner:
         #     if i == largest_mol_index:  # Skip the template molecule
         #         continue
 
-        #     mcs = rdFMCS.FindMCS([self.template, mol], 
+        #     mcs = rdFMCS.FindMCS([self.template, mol],
         #                         completeRingsOnly=True,
         #                         ringMatchesRingOnly=False,
         #                         atomCompare=rdFMCS.AtomCompare.CompareAny,
@@ -84,14 +88,14 @@ class MoleculeAligner:
         #         mol_match = mol.GetSubstructMatch(core)
 
         #         if template_match and mol_match:
-        #             cmap = {mol_match[k]: self.template.GetConformer().GetAtomPosition(template_match[k]) 
+        #             cmap = {mol_match[k]: self.template.GetConformer().GetAtomPosition(template_match[k])
         #                    for k in range(len(template_match))}
         #             try:
-        #                 #AllChem.EmbedMolecule(mol, coordMap=cmap, 
+        #                 #AllChem.EmbedMolecule(mol, coordMap=cmap,
         #                 #                    ignoreSmoothingFailures=True, useRandomCoords=True)
-        #                 AllChem.EmbedMolecule(mol, coordMap=cmap, 
+        #                 AllChem.EmbedMolecule(mol, coordMap=cmap,
         #                                       ignoreSmoothingFailures=True, useRandomCoords=True, useBasicKnowledge = True)
-        #                 
+        #
         #                 mcp = Chem.Mol(mol)
         #                 # mmff_props = MMFFGetMoleculeProperties(mcp)
         #                 # ff = MMFFGetMoleculeForceField(mcp, mmff_props)
