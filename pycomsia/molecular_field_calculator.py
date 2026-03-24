@@ -1,6 +1,10 @@
+import logging
+
 from rdkit import Chem
 from rdkit.Chem import AllChem, rdMolDescriptors
 import numpy as np
+
+logger = logging.getLogger(__name__)
 
 
 class MolecularFieldCalculator:
@@ -41,13 +45,22 @@ class MolecularFieldCalculator:
         }
         
         # Calculate fields for all molecules
+        n_train, n_pred = 0, 0
         for mol, is_training in aligned_results:
             if mol is not None:
+                mol_name = mol.GetProp("_Name") if mol.HasProp("_Name") else "?"
+                logger.debug(f"  Calculating fields for {'train' if is_training else 'pred'} "
+                             f"mol '{mol_name}' ({mol.GetNumAtoms()} atoms)")
                 fields = self._calc_single_molecule_field(mol, grid_spacing, grid_dimensions, grid_origin)
                 # Sort into training or prediction fields
                 target_fields = train_fields if is_training else pred_fields
                 for field_name in target_fields:
                     target_fields[field_name].append(fields[field_name].flatten())
+                if is_training:
+                    n_train += 1
+                else:
+                    n_pred += 1
+        logger.debug(f"Field calculation complete: {n_train} train, {n_pred} pred molecules")
         
         return {
             'train_fields': train_fields,
@@ -104,9 +117,11 @@ class MolecularFieldCalculator:
             hydrophobic_field.ravel()[:] += (atom_hydrophobicities[i] * gaussian) * 25
         
         # Calculate H-bond fields
+        total_donors, total_acceptors = 0, 0
         for pattern in self.donor_patterns:
             matches = mol.GetSubstructMatches(pattern, uniquify = 1)
             pseudoatoms = self.generate_pseudoatoms(mol, matches, True)
+            total_donors += len(pseudoatoms)
             for pos in pseudoatoms:
                 displacement = grid_points - pos
                 distances_sq = np.sum(displacement ** 2, axis=1)
@@ -116,11 +131,14 @@ class MolecularFieldCalculator:
         for pattern in self.acceptor_patterns:
             matches = mol.GetSubstructMatches(pattern, uniquify = 1)
             pseudoatoms = self.generate_pseudoatoms(mol, matches, False)
+            total_acceptors += len(pseudoatoms)
             for pos in pseudoatoms:
                 displacement = grid_points - pos
                 distances_sq = np.sum(displacement ** 2, axis=1)
                 gaussian = np.exp(-self.ALPHA * distances_sq)
                 hbond_acceptor_field.ravel()[:] += gaussian * 20
+        
+        logger.debug(f"    H-bond pseudoatoms: {total_donors} donors, {total_acceptors} acceptors")
         
         return {
             'steric_field': steric_field,

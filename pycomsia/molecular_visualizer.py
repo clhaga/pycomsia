@@ -1,6 +1,12 @@
+import logging
+
 import numpy as np
 import pyvista as pv
 from rdkit import Chem
+
+logger = logging.getLogger(__name__)
+
+
 class MolecularVisualizer:
     def __init__(self):
         self.plotter = None
@@ -21,7 +27,7 @@ class MolecularVisualizer:
         self.plotter.camera_position = 'iso'
         filename = f'{outputdir}/Alignments/aligned_molecules.png'
         self.plotter.screenshot(filename, scale=5)
-        print(f"Image saved to {filename}")
+        logger.info(f"Image saved to {filename}")
         self.plotter.close()
     
     def visualize_field(self, mol, grid_spacing, grid_shape, grid_origin, field_values, outputdir):
@@ -87,7 +93,7 @@ class MolecularVisualizer:
             # Save and close
             filename = f"{outputdir}/Field_Plots/{field_name}.png"
             self.plotter.screenshot(filename, scale=5)
-            print(f"Image saved to {filename}")
+            logger.info(f"Image saved to {filename}")
             self.plotter.close()
 
     def _add_finishing_touches(self, title=None):

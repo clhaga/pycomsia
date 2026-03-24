@@ -1,3 +1,5 @@
+import logging
+
 import numpy as np
 from sklearn.model_selection import LeaveOneOut
 from sklearn.cross_decomposition import PLSRegression
@@ -7,6 +9,8 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import r2_score
 #from sklearn.metrics import r2_score
 import pandas as pd
+
+logger = logging.getLogger(__name__)
 
 class PLSAnalysisTestSets:
     def __init__(self):
@@ -83,10 +87,10 @@ class PLSAnalysisTestSets:
 
             filtered_fields[field_name] = combined_fields[field_name][:, kept_idx]
 
-            print(f"\n{field_name}:")
-            print(f"Original points: {len(ranges)}")
-            print(f"Points kept: {len(kept_idx)}")
-            print(f"Points filtered: {len(filtered_idx)}")
+            logger.debug(f"\n{field_name}:")
+            logger.debug(f"Original points: {len(ranges)}")
+            logger.debug(f"Points kept: {len(kept_idx)}")
+            logger.debug(f"Points filtered: {len(filtered_idx)}")
 
         X_train = []
         X_test = None if test_fields is None else []
@@ -130,6 +134,10 @@ class PLSAnalysisTestSets:
         self.field_names = list(train_fields.keys())
         self.field_shape = (len(train_fields['steric_field'][0]),)
 
+        logger.debug(f"X_train shape: {X_train.shape}")
+        if X_test is not None:
+            logger.debug(f"X_test shape: {X_test.shape}")
+
         return X_train, X_test
 
 
@@ -168,9 +176,9 @@ class PLSAnalysisTestSets:
         # Store and print results
         self.contribution_fractions = contribution_fractions
         
-        print("\nField Contribution Fractions:")
+        logger.debug("\nField Contribution Fractions:")
         for field_name, fraction in contribution_fractions.items():
-            print(f"{field_name}: {fraction:.4f}")
+            logger.debug(f"{field_name}: {fraction:.4f}")
 
     def export_predictions_and_residuals(self, outputdir):
         """Export actual values, predicted values, and residuals for both training and test sets to CSV files"""
@@ -211,7 +219,7 @@ class PLSAnalysisTestSets:
         train_df.to_csv(f'{outputdir}/PLS_Analysis/Training_Predictions_and_Residuals.csv', index=False)
         test_df.to_csv(f'{outputdir}/PLS_Analysis/Test_Predictions_and_Residuals.csv', index=False)
         
-        print(f"Residual files exported to {outputdir}/PLS_Analysis/")
+        logger.info(f"Residual files exported to {outputdir}/PLS_Analysis/")
 
 
     def export_metrics_to_csv(self, outputdir):
@@ -271,6 +279,11 @@ class PLSAnalysisTestSets:
             reconstructed_fields[field_name] = field_coeffs_full
             contour_values[field_name] = contour_values_full
             
+            nonzero = np.count_nonzero(contour_values_full)
+            logger.debug(f"  {field_name}: {n_kept_points} kept pts, "
+                         f"coeff range=[{field_coeffs_kept.min():.4f}, {field_coeffs_kept.max():.4f}], "
+                         f"{nonzero} non-zero contour pts")
+            
             # Update start index for next field
             start_idx += n_kept_points
         
@@ -286,6 +299,9 @@ class PLSAnalysisTestSets:
         y = y - y_mean  # Mean center y
         q2_scores = []
         press_values_all_components = []
+        n_mols = self.X_train.shape[0]
+        max_comp_actual = min(n_mols, max_components + 1)
+        logger.debug(f"LOO CV: {n_mols} molecules, testing {max_comp_actual - 1} components")
 
         for n_components in range(1, min(self.X_train.shape[0], max_components + 1)):
             press_values = []
@@ -309,14 +325,14 @@ class PLSAnalysisTestSets:
             mean_ssy = np.mean(ssy_values) 
             q2 = 1 - (mean_press / mean_ssy)
 
-            print(f'q2 = {q2:.4f} for component = {n_components}')
+            logger.debug(f'q2 = {q2:.4f} for component = {n_components}')
             q2_scores.append(q2)
 
         self.optimal_n_components = np.argmax(q2_scores) + 1
         self.q2_scores = q2_scores
         self.press_values = np.array(press_values_all_components)
         self.spress = np.sqrt(np.mean(self.press_values[self.optimal_n_components - 1]))
-        print(f"Optimal number of components based on maximum Q2: {self.optimal_n_components}")
+        logger.info(f"Optimal number of components based on maximum Q2: {self.optimal_n_components}")
     
     def fit_final_model(self, train_activities, test_activities=None):
         """
@@ -358,10 +374,10 @@ class PLSAnalysisTestSets:
 
         # Calculate R² for both sets (using original values)
         self.r2_train = r2_score(self.y_train_final_original, self.y_train_predicted_original)
-        print(f"R² Training: {self.r2_train:.4f}")
+        logger.info(f"R² Training: {self.r2_train:.4f}")
         if self.y_test_final is not None:
             self.r2_test = r2_score(self.y_test_final_original, self.y_test_predicted_original)
-        print(f"R² Test: {self.r2_test:.4f}")
+        logger.info(f"R² Test: {self.r2_test:.4f}")
 
         # Calculate S for training set
         residuals_train = self.y_train_final_original - self.y_train_predicted_original
@@ -372,11 +388,11 @@ class PLSAnalysisTestSets:
             residuals_test = self.y_test_final_original - self.y_test_predicted_original
             self.s_test = np.std(residuals_test)
         
-            # Print SPESS and S values
-        print(f"SPRESS: {self.spress:.4f}")
-        print(f"S Training: {self.s_train:.4f}")
+            # Log SPRESS and S values
+        logger.info(f"SPRESS: {self.spress:.4f}")
+        logger.info(f"S Training: {self.s_train:.4f}")
         if self.y_test_final is not None:
-            print(f"S Test: {self.s_test:.4f}")
+            logger.info(f"S Test: {self.s_test:.4f}")
             
         self.calculate_contribution_fractions()
         
@@ -471,19 +487,19 @@ class PLSAnalysisTestSets:
         plt.savefig(filename)
         
         # Print statistics for both sets
-        print("\nModel Statistics:")
-        print("Training Set:")
+        logger.info("\nModel Statistics:")
+        logger.info("Training Set:")
         train_rmse = np.sqrt(np.mean(train_residuals**2))
         train_mae = np.mean(np.abs(train_residuals))
-        print(f"R² Score: {r2_train:.4f}")
-        print(f"Root Mean Square Error: {train_rmse:.4f}")
-        print(f"Mean Absolute Error: {train_mae:.4f}")
-        print(f"Std of Residuals: {np.std(train_residuals):.4f}")
+        logger.info(f"R² Score: {r2_train:.4f}")
+        logger.info(f"Root Mean Square Error: {train_rmse:.4f}")
+        logger.info(f"Mean Absolute Error: {train_mae:.4f}")
+        logger.info(f"Std of Residuals: {np.std(train_residuals):.4f}")
         
-        print("\nTest Set:")
+        logger.info("\nTest Set:")
         test_rmse = np.sqrt(np.mean(test_residuals**2))
         test_mae = np.mean(np.abs(test_residuals))
-        print(f"R² Score: {r2_test:.4f}")
-        print(f"Root Mean Square Error: {test_rmse:.4f}")
-        print(f"Mean Absolute Error: {test_mae:.4f}")
-        print(f"Std of Residuals: {np.std(test_residuals):.4f}")
+        logger.info(f"R² Score: {r2_test:.4f}")
+        logger.info(f"Root Mean Square Error: {test_rmse:.4f}")
+        logger.info(f"Mean Absolute Error: {test_mae:.4f}")
+        logger.info(f"Std of Residuals: {np.std(test_residuals):.4f}")

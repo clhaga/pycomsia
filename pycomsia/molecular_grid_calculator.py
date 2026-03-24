@@ -1,5 +1,10 @@
+import logging
+
 import numpy as np
 from rdkit import Chem
+
+logger = logging.getLogger(__name__)
+
 
 class MolecularGridCalculator:
     def __init__(self):
@@ -42,6 +47,12 @@ class MolecularGridCalculator:
             raise ValueError("No valid molecules found in aligned_results")
         
         coords = np.array(coords)
+        n_mols = sum(1 for _, _ in aligned_results)
+        logger.debug(f"Grid input: {n_mols} molecules, {len(coords)} atomic coords")
+        logger.debug(f"Coordinate range before snap: "
+                     f"x=[{coords[:,0].min():.2f}, {coords[:,0].max():.2f}]  "
+                     f"y=[{coords[:,1].min():.2f}, {coords[:,1].max():.2f}]  "
+                     f"z=[{coords[:,2].min():.2f}, {coords[:,2].max():.2f}]")
         
         # Snap coordinates to the grid
         snapped_coords = self._snap_coords_to_grid(coords, resolution)
@@ -60,5 +71,9 @@ class MolecularGridCalculator:
         
         grid_dimensions = (nx, ny, nz)
         grid_origin = tuple(min_coords)
+        
+        logger.debug(f"Grid origin: ({grid_origin[0]:.2f}, {grid_origin[1]:.2f}, {grid_origin[2]:.2f})")
+        logger.debug(f"Grid dimensions: {nx} x {ny} x {nz} = {nx*ny*nz} points")
+        logger.debug(f"Grid spacing: {resolution} Å  padding: {padding} Å")
         
         return grid_spacing, grid_dimensions, grid_origin

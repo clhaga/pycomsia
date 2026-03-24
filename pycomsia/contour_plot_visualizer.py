@@ -1,9 +1,13 @@
+import logging
+
 import numpy as np
 import pyvista as pv
 from rdkit import Chem
 from rdkit.Chem import AllChem
 import os
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 # Try to import PyMOL, handle gracefully if not available
 try:
@@ -41,10 +45,12 @@ class ContourPlotVisualizer:
             if len(high_range) == 0:
                 high_range = [np.max(sorted_values)]
 
-            significant_ranges[field_name] = {
-                "low": (np.min(low_range), np.max(low_range)),
-                "high": (np.min(high_range), np.max(high_range)),
-            }
+            lo = (np.min(low_range), np.max(low_range))
+            hi = (np.min(high_range), np.max(high_range))
+            significant_ranges[field_name] = {"low": lo, "high": hi}
+            logger.debug(f"  {field_name}: low=[{lo[0]:.4f}, {lo[1]:.4f}]  "
+                         f"high=[{hi[0]:.4f}, {hi[1]:.4f}]  "
+                         f"(top/bottom {top_percent}%)")
 
         self.significant_ranges = significant_ranges
         return significant_ranges
@@ -124,7 +130,7 @@ class ContourPlotVisualizer:
 
             filename = f"{output}/Contour_Plots/{field_name}_contourplot.png"
             plotter.screenshot(filename, scale=5)
-            print(f"Saved contour plot for {field_name} field to {filename}")
+            logger.info(f"Saved contour plot for {field_name} field to {filename}")
             plotter.close()
 
     def create_pymol_session(
@@ -156,8 +162,8 @@ class ContourPlotVisualizer:
                           object and displayed as cartoon.
         """
         if not PYMOL_AVAILABLE:
-            print(
-                "⚠️  PyMOL not available. Install pymol-open-source to create PyMOL sessions."
+            logger.warning(
+                "PyMOL not available. Install pymol-open-source to create PyMOL sessions."
             )
             return
 
@@ -183,8 +189,8 @@ class ContourPlotVisualizer:
                     writer.write(mol)
             writer.close()
 
-            print(
-                f"📄 Created temporary SDF with {len(molecules)} molecules: {temp_sdf_file}"
+            logger.info(
+                f"Created temporary SDF with {len(molecules)} molecules: {temp_sdf_file}"
             )
 
             # Initialize PyMOL instance
@@ -200,7 +206,7 @@ class ContourPlotVisualizer:
                 if protein_file is not None:
                     protein_path = Path(protein_file)
                     if not protein_path.exists():
-                        print(f"⚠️  Protein file not found, skipping: {protein_file}")
+                        logger.warning(f"Protein file not found, skipping: {protein_file}")
                     else:
                         protein_object_name = protein_path.stem
                         cmd.load(str(protein_path), protein_object_name)
@@ -208,7 +214,9 @@ class ContourPlotVisualizer:
                         cmd.show("cartoon", protein_object_name)
                         cmd.color("grey80", protein_object_name)
                         protein_loaded = True
-                        print(f"✅ Protein loaded: {protein_path.name} (object: {protein_object_name})")
+                        logger.info(
+                            f"Protein loaded: {protein_path.name} (object: {protein_object_name})"
+                        )
 
                 # Remove non-polar hydrogens (keep only polar hydrogens bonded to N, O, S)
                 cmd.remove("elem H and not (neighbor elem N+O+S)")
@@ -245,7 +253,7 @@ class ContourPlotVisualizer:
 
                 # Compute and add binding site volume when a protein is available
                 if protein_loaded:
-                    print("   🔬 Computing binding site volume...")
+                    logger.info("Computing binding site volume...")
                     # Use 'polymer' to select only protein chains — excludes any co-crystallised
                     # ligands, waters, and other HETATM records present in the PDB file.
                     protein_coords_raw = cmd.get_coords(
@@ -259,7 +267,9 @@ class ContourPlotVisualizer:
                             self._add_binding_site_to_pymol(
                                 cmd, binding_site_points, "binding_site_volume", "cyan"
                             )
-                            print(f"   ✅ Binding site volume: {len(binding_site_points)} grid points")
+                            logger.info(
+                                f"Binding site volume: {len(binding_site_points)} grid points"
+                            )
 
                             # Add per-field excluded volume objects when field data is available
                             if (
@@ -267,7 +277,7 @@ class ContourPlotVisualizer:
                                 and grid_dimensions is not None
                                 and significant_ranges is not None
                             ):
-                                print("   🔬 Computing per-field excluded volumes...")
+                                logger.info("Computing per-field excluded volumes...")
                                 self._add_excluded_field_volumes_to_pymol(
                                     cmd,
                                     binding_site_points,
@@ -278,9 +288,11 @@ class ContourPlotVisualizer:
                                     significant_ranges,
                                 )
                         else:
-                            print("   ⚠️  No binding site volume points found (check protein proximity to ligands)")
+                            logger.warning(
+                                "No binding site volume points found (check protein proximity to ligands)"
+                            )
                     else:
-                        print("   ⚠️  Could not retrieve protein coordinates")
+                        logger.warning("Could not retrieve protein coordinates")
 
                 # Center and zoom on all molecules
                 cmd.center("ligands")
@@ -292,23 +304,23 @@ class ContourPlotVisualizer:
                 # Save PyMOL session
                 cmd.save(str(session_file))
 
-                print(f"✅ PyMOL session saved: {session_file}")
-                print(f"   📊 Contains {len(molecules)} ligands")
+                logger.info(f"PyMOL session saved: {session_file}")
+                logger.info(f"Contains {len(molecules)} ligands")
                 if coefficients is not None:
                     field_count = len(
                         [f for f in coefficients.keys() if f in significant_ranges]
                     )
-                    print(f"   🎨 Field contours included: {field_count} field types")
-                print(f"   💡 Open with: pymol {session_file}")
+                    logger.info(f"Field contours included: {field_count} field types")
+                logger.info(f"Open with: pymol {session_file}")
 
         except Exception as e:
-            print(f"❌ Error creating PyMOL session: {e}")
+            logger.error(f"Error creating PyMOL session: {e}")
 
         finally:
             # Clean up temporary file
             if temp_sdf_file.exists():
                 temp_sdf_file.unlink()
-                print(f"🗑️  Cleaned up temporary file: {temp_sdf_file}")
+                logger.debug(f"Cleaned up temporary file: {temp_sdf_file}")
 
     def _add_all_field_contours_to_pymol(
         self,
@@ -342,7 +354,7 @@ class ContourPlotVisualizer:
         for field_name, field_data in coefficients.items():
             if field_name in significant_ranges:
                 try:
-                    print(f"   🎨 Adding {field_name} contours...")
+                    logger.info(f"Adding {field_name} contours...")
 
                     # Get colors for this field
                     colors = field_colors.get(
@@ -399,17 +411,17 @@ class ContourPlotVisualizer:
                                 colors["high"],
                             )
 
-                        print(
-                            f"     ✅ {field_short}: {contours_low.n_points} low, {contours_high.n_points} high points"
+                        logger.info(
+                            f"{field_short}: {contours_low.n_points} low, {contours_high.n_points} high points"
                         )
 
                     except ImportError:
-                        print(
-                            f"     ⚠️  PyVista not available for {field_name} contour generation"
+                        logger.warning(
+                            f"PyVista not available for {field_name} contour generation"
                         )
 
                 except Exception as e:
-                    print(f"     ⚠️  Could not add {field_name} contours: {e}")
+                    logger.warning(f"Could not add {field_name} contours: {e}")
 
     def _add_contour_surfaces_to_pymol(self, cmd, contour_mesh, object_name, color):
         """
@@ -448,8 +460,8 @@ class ContourPlotVisualizer:
             # Rename the object to final name
             cmd.set_name(f"{object_name}_temp", object_name)
 
-            print(
-                f"       🔵 Added {len(points)} {color} surface points as '{object_name}'"
+            logger.debug(
+                f"Added {len(points)} {color} surface points as '{object_name}'"
             )
 
     def _add_contour_spheres_to_pymol(
@@ -493,7 +505,7 @@ class ContourPlotVisualizer:
             # Rename the object to final name
             cmd.set_name(f"{object_name}_temp", object_name)
 
-            print(f"   🔵 Added {len(points)} {color} spheres as '{object_name}'")
+            logger.debug(f"Added {len(points)} {color} spheres as '{object_name}'")
 
     def _compute_binding_site_volume(
         self,
@@ -654,7 +666,9 @@ class ContourPlotVisualizer:
         cmd.set("transparency", 0.7, tmp_name)
         cmd.set_name(tmp_name, object_name)
 
-        print(f"       🔵 Added {len(points)} {color} surface points as '{object_name}'")
+        logger.debug(
+            f"Added {len(points)} {color} surface points as '{object_name}'"
+        )
 
     def _add_excluded_field_volumes_to_pymol(
         self,
@@ -680,11 +694,11 @@ class ContourPlotVisualizer:
         # Colours match the existing field contour colour map; use the 'low' colour
         # as the representative shade for the excluded object.
         field_colors = {
-            "steric_field":        "green",
+            "steric_field": "green",
             "electrostatic_field": "blue",
-            "hydrophobic_field":   "purple",
-            "hbond_acceptor_field":"purple",
-            "hbond_donor_field":   "grey",
+            "hydrophobic_field": "purple",
+            "hbond_acceptor_field": "purple",
+            "hbond_donor_field": "grey",
         }
 
         # DEBUG: collect excluded point sets to compare across fields at the end
@@ -708,12 +722,12 @@ class ContourPlotVisualizer:
                 grid.spacing = grid_spacing
                 grid.point_data[field_name] = field_values.flatten(order="F")
 
-                low  = significant_ranges[field_name]["low"]
+                low = significant_ranges[field_name]["low"]
                 high = significant_ranges[field_name]["high"]
 
                 # Generate the isosurface meshes (same iso-values as the contour objects)
-                contour_low  = grid.contour(
-                    [low[0],  low[1]],  scalars=field_name, method="marching_cubes"
+                contour_low = grid.contour(
+                    [low[0], low[1]], scalars=field_name, method="marching_cubes"
                 )
                 contour_high = grid.contour(
                     [high[0], high[1]], scalars=field_name, method="marching_cubes"
@@ -729,18 +743,20 @@ class ContourPlotVisualizer:
                 n_iso = sum(len(v) for v in iso_verts)
 
                 # DEBUG
-                print(
-                    f"     [DEBUG] {field_name}:\n"
-                    f"       iso-surface vertices: low={contour_low.n_points}, "
+                logger.debug(
+                    f"[DEBUG] {field_name}:\n"
+                    f"  iso-surface vertices: low={contour_low.n_points}, "
                     f"high={contour_high.n_points}  (total {n_iso})\n"
-                    f"       thresholds: low=({low[0]:.4f}, {low[1]:.4f})  "
+                    f"  thresholds: low=({low[0]:.4f}, {low[1]:.4f})  "
                     f"high=({high[0]:.4f}, {high[1]:.4f})\n"
-                    f"       exploration_radius={exploration_radius} Å"
+                    f"  exploration_radius={exploration_radius} Å"
                 )
 
                 if n_iso == 0:
                     # No isosurface generated — entire binding site is unexplored
-                    print(f"       → no iso-surface vertices; all binding site points are excluded")
+                    logger.debug(
+                        f"no iso-surface vertices for {field_name}; all binding site points are excluded"
+                    )
                     excluded_points = binding_site_points
                 else:
                     all_iso_verts = np.vstack(iso_verts)  # (M, 3)
@@ -760,8 +776,8 @@ class ContourPlotVisualizer:
                     explored = min_dists_iso <= exploration_radius
                     excluded_points = binding_site_points[~explored]
 
-                    print(
-                        f"       explored (within {exploration_radius}Å of iso): "
+                    logger.debug(
+                        f"explored (within {exploration_radius}Å of iso): "
                         f"{explored.sum()}/{len(binding_site_points)}  "
                         f"excluded: {(~explored).sum()}"
                     )
@@ -770,39 +786,41 @@ class ContourPlotVisualizer:
 
                 field_short = field_name.replace("_field", "")
                 object_name = f"{field_short}_excluded"
-                color       = field_colors.get(field_name, "white")
+                color = field_colors.get(field_name, "white")
 
                 if len(excluded_points) > 0:
                     self._add_binding_site_to_pymol(
                         cmd, excluded_points, object_name, color
                     )
                     pct = 100 * len(excluded_points) / len(binding_site_points)
-                    print(
-                        f"     ✅ {object_name}: {len(excluded_points)} excluded points "
+                    logger.info(
+                        f"{object_name}: {len(excluded_points)} excluded points "
                         f"({pct:.0f}% of binding site)"
                     )
                 else:
-                    print(
-                        f"     ℹ️  {object_name}: no excluded points — "
+                    logger.info(
+                        f"{object_name}: no excluded points — "
                         f"field covers entire binding site"
                     )
 
             except Exception as e:
-                print(f"     ⚠️  Could not compute excluded volume for {field_name}: {e}")
+                logger.warning(
+                    f"Could not compute excluded volume for {field_name}: {e}"
+                )
 
         # DEBUG: cross-compare excluded point sets
         if len(_debug_excluded) > 1:
             field_names = list(_debug_excluded.keys())
-            print("     [DEBUG] Cross-field excluded-point comparison:")
+            logger.debug("[DEBUG] Cross-field excluded-point comparison:")
             for i in range(len(field_names)):
                 for j in range(i + 1, len(field_names)):
                     fa, fb = field_names[i], field_names[j]
                     pa, pb = _debug_excluded[fa], _debug_excluded[fb]
                     if pa.shape == pb.shape and np.array_equal(pa, pb):
-                        print(f"       ⚠️  IDENTICAL: {fa} == {fb}  ({len(pa)} pts)")
+                        logger.debug(f"  IDENTICAL: {fa} == {fb}  ({len(pa)} pts)")
                     else:
-                        print(
-                            f"       ✅ different: {fa} ({len(pa)} pts) vs "
+                        logger.debug(
+                            f"  different: {fa} ({len(pa)} pts) vs "
                             f"{fb} ({len(pb)} pts)"
                         )
 

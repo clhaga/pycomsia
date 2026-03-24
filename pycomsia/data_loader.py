@@ -1,6 +1,10 @@
+import logging
+
 import pandas as pd
 from rdkit import Chem
 from rdkit.Chem import AllChem
+
+logger = logging.getLogger(__name__)
 
 
 class DataLoader:
@@ -31,20 +35,25 @@ class DataLoader:
             If is_training=False: (smiles_list, [(mol, is_training)], None)
         """
         # Read the SDF file
-        print("Reading SDF file...")
+        logger.info("Reading SDF file...")
         suppl = Chem.SDMolSupplier(sdf_file, removeHs=False)
         self.smiles_list = []
         mols_with_flag = []  # List of tuples: (mol, is_training)
         self.activities = []
         original_mols = []  # Store original molecules for protonation validation
+        _mol_idx = 0
 
         for mol in suppl:
             if mol is not None:
                 # Store original molecule for protonation validation
                 original_mols.append(mol)
                 
-                # Check if molecule already has hydrogen atoms
+                # Count hydrogen atoms and log per-molecule status at DEBUG level
                 num_hs = sum(1 for atom in mol.GetAtoms() if atom.GetAtomicNum() == 1)
+                mol_name = mol.GetProp("_Name") if mol.HasProp("_Name") else f"mol_{_mol_idx}"
+                logger.debug(f"  Mol {_mol_idx} ({mol_name}): {mol.GetNumAtoms()} atoms, "
+                             f"{num_hs} explicit H")
+                _mol_idx += 1
                 
                 if num_hs > 0:
                     # Molecule already has hydrogens, validate they have coordinates
@@ -122,6 +131,13 @@ class DataLoader:
 
         if not is_training:
             self.activities = None
+
+        n_loaded = len(mols_with_flag)
+        logger.debug(f"Loaded {n_loaded} molecules from {sdf_file}")
+        if is_training and self.activities:
+            acts = self.activities
+            logger.debug(f"Activity range: min={min(acts):.3f}  max={max(acts):.3f}  "
+                         f"mean={sum(acts)/len(acts):.3f}")
 
         return self.smiles_list, mols_with_flag, self.activities
 

@@ -1,6 +1,7 @@
 """Command-line interface for PyCoMSIA."""
 
 import click
+import logging
 from datetime import datetime
 import os
 import numpy as np
@@ -101,6 +102,12 @@ FIELD_OPTIONS = {
     help="Optional protein structure file (PDB/mmCIF) to include in the PyMOL session.",
 )
 @click.option(
+    "--verbose",
+    "-v",
+    is_flag=True,
+    help="Enable verbose (DEBUG-level) logging output.",
+)
+@click.option(
     "--output-dir",
     "-o",
     required=True,
@@ -119,6 +126,7 @@ def main(
     column_filter,
     disable_visualization,
     protein_file,
+    verbose,
     output_dir,
 ):
     """Run PyCoMSIA molecular field analysis.
@@ -146,6 +154,12 @@ def main(
 
         pycomsia -t data.sdf -a Activity -f SE -r 0.5 -o results
     """
+
+    # Configure logging
+    logging.basicConfig(
+        level=logging.DEBUG if verbose else logging.INFO,
+        format="%(message)s",
+    )
 
     # Create output directory
     if not os.path.exists(output_dir):
