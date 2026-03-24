@@ -10,6 +10,7 @@ from sklearn.metrics import r2_score
 
 # from sklearn.metrics import r2_score
 import pandas as pd
+from tqdm import tqdm
 
 logger = logging.getLogger(__name__)
 
@@ -331,35 +332,44 @@ class PLSAnalysisTestSets:
             f"LOO CV: {n_mols} molecules, testing {max_comp_actual - 1} components"
         )
 
-        for n_components in range(1, min(self.X_train.shape[0], max_components + 1)):
-            press_values = []
-            ypreds = []
-            press_values = []
-            ssy_values = []
+        total_fits = (max_comp_actual - 1) * n_mols
+        with tqdm(
+            total=total_fits,
+            desc="LOO CV",
+            unit="fit",
+            leave=True,
+        ) as pbar:
+            for n_components in range(1, max_comp_actual):
+                press_values = []
+                ypreds = []
+                press_values = []
+                ssy_values = []
 
-            for train_index, test_index in loo.split(self.X_train):
-                X_train_loo, X_test_loo = (
-                    self.X_train[train_index],
-                    self.X_train[test_index],
-                )
-                y_train_loo, y_test_loo = y[train_index], y[test_index]
+                for train_index, test_index in loo.split(self.X_train):
+                    X_train_loo, X_test_loo = (
+                        self.X_train[train_index],
+                        self.X_train[test_index],
+                    )
+                    y_train_loo, y_test_loo = y[train_index], y[test_index]
 
-                pls = PLSRegression(
-                    n_components=n_components, scale=False, tol=1e-4, max_iter=100
-                )
-                pls.fit(X_train_loo, y_train_loo)
-                y_pred = pls.predict(X_test_loo)[0]
-                press_values.append((y_test_loo[0] - y_pred) ** 2)
-                ssy_values.append((y_test_loo[0]) ** 2)
-                ypreds.append(y_pred)
+                    pls = PLSRegression(
+                        n_components=n_components, scale=False, tol=1e-4, max_iter=100
+                    )
+                    pls.fit(X_train_loo, y_train_loo)
+                    y_pred = pls.predict(X_test_loo)[0]
+                    press_values.append((y_test_loo[0] - y_pred) ** 2)
+                    ssy_values.append((y_test_loo[0]) ** 2)
+                    ypreds.append(y_pred)
+                    pbar.update(1)
 
-            press_values_all_components.append(np.array(press_values))
-            mean_press = np.mean(press_values)
-            mean_ssy = np.mean(ssy_values)
-            q2 = 1 - (mean_press / mean_ssy)
+                press_values_all_components.append(np.array(press_values))
+                mean_press = np.mean(press_values)
+                mean_ssy = np.mean(ssy_values)
+                q2 = 1 - (mean_press / mean_ssy)
 
-            logger.debug(f"q2 = {q2:.4f} for component = {n_components}")
-            q2_scores.append(q2)
+                logger.debug(f"q2 = {q2:.4f} for component = {n_components}")
+                pbar.set_postfix({"comp": n_components, "q2": f"{q2:.3f}"})
+                q2_scores.append(q2)
 
         self.optimal_n_components = np.argmax(q2_scores) + 1
         self.q2_scores = q2_scores

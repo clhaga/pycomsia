@@ -9,6 +9,7 @@ dependencies:
   - scikit-learn
   - matplotlib
   - seaborn
+  - tqdm
   - pubchempy
   - pytest
   - cookiecutter
