@@ -48,6 +48,12 @@ FIELD_OPTIONS = {
     help="Path to the input SDF file for prediction. Molecules MUST be prealigned.",
 )
 @click.option(
+    "--prospective-file",
+    "-s",
+    type=click.Path(exists=True),
+    help="SDF file of pre-aligned prospective ligands to predict on. No activity values required. Predicted activities are written back as SD tags.",
+)
+@click.option(
     "--sdf-activity",
     "-a",
     required=True,
@@ -118,6 +124,7 @@ FIELD_OPTIONS = {
 def main(
     train_file,
     predict_file,
+    prospective_file,
     sdf_activity,
     grid_resolution,
     grid_padding,
@@ -173,6 +180,8 @@ def main(
     click.echo(f"📄 Training file: {train_file}")
     if predict_file:
         click.echo(f"🔮 Prediction file: {predict_file}")
+    if prospective_file:
+        click.echo(f"🔭 Prospective file: {prospective_file}")
     click.echo(f"⚗️  Fields: {fields} ({', '.join(FIELD_OPTIONS[fields])})")
     click.echo(f"🔬 Grid resolution: {grid_resolution}")
     click.echo(f"📊 Components: {num_components}")
@@ -192,26 +201,33 @@ def main(
     # Load data from SDF files
     click.echo("📂 Loading molecular data...")
 
+    # Always load training data
+    train_smiles_list, train_mols, train_activities = data_loader.load_sdf_data(
+        train_file, sdf_activity, is_training=True
+    )
+    aligned_mols = list(train_mols)
+
+    predict_smiles_list = []
+    predict_mols = []
     if predict_file is not None:
-        # Load both training and prediction files
         predict_smiles_list, predict_mols, _ = data_loader.load_sdf_data(
             predict_file, is_training=False
         )
-        train_smiles_list, train_mols, train_activities = data_loader.load_sdf_data(
-            train_file, sdf_activity, is_training=True
-        )
-        # Combine molecules (assuming pre-aligned)
-        aligned_mols = train_mols + predict_mols
+        aligned_mols += predict_mols
         click.echo(
             f"✅ Loaded {len(train_mols)} training molecules and {len(predict_mols)} prediction molecules"
         )
     else:
-        # Load only training file
-        train_smiles_list, train_mols, train_activities = data_loader.load_sdf_data(
-            train_file, sdf_activity, is_training=True
-        )
-        aligned_mols = train_mols
         click.echo(f"✅ Loaded {len(train_mols)} training molecules")
+
+    prospective_smiles_list = []
+    prospective_mols = []
+    if prospective_file is not None:
+        prospective_smiles_list, prospective_mols, _ = data_loader.load_sdf_data(
+            prospective_file, is_training=False
+        )
+        aligned_mols += prospective_mols
+        click.echo(f"✅ Loaded {len(prospective_mols)} prospective molecules")
 
     # Extract training molecules for further processing
     train_aligned_mols = [mol for mol, is_training in aligned_mols if is_training]
@@ -238,6 +254,23 @@ def main(
         aligned_mols, grid_spacing, grid_dimensions, grid_origin
     )
     click.echo("✅ Molecular fields calculated")
+
+    # Split pred_fields into predict-set and prospective-set portions (both use is_training=False)
+    n_predict_mols = len(predict_mols)
+    n_prospective_mols = len(prospective_mols)
+    raw_pred_fields = all_field_values["pred_fields"]
+    if n_predict_mols > 0 and n_prospective_mols > 0:
+        predict_only_fields = {k: v[:n_predict_mols] for k, v in raw_pred_fields.items()}
+        prospective_only_fields = {k: v[n_predict_mols:] for k, v in raw_pred_fields.items()}
+    elif n_predict_mols > 0:
+        predict_only_fields = raw_pred_fields
+        prospective_only_fields = None
+    elif n_prospective_mols > 0:
+        predict_only_fields = None
+        prospective_only_fields = raw_pred_fields
+    else:
+        predict_only_fields = None
+        prospective_only_fields = None
 
     # Visualize fields (if visualization is enabled and available)
     if not disable_visualization and VISUALIZATION_AVAILABLE:
@@ -275,10 +308,10 @@ def main(
         if k.replace("_field", "") in FIELD_OPTIONS[fields]
     }
     pred_fields_selected = None
-    if predict_file is not None:
+    if predict_file is not None and predict_only_fields is not None:
         pred_fields_selected = {
             k: v
-            for k, v in all_field_values["pred_fields"].items()
+            for k, v in predict_only_fields.items()
             if k.replace("_field", "") in FIELD_OPTIONS[fields]
         }
 
@@ -307,6 +340,31 @@ def main(
     coefficients = pls_analysis.get_coefficient_fields()
 
     click.echo("✅ PLS analysis completed")
+
+    # Predict activities for prospective ligand set and write annotated SDF
+    if prospective_file is not None and prospective_only_fields is not None:
+        click.echo("🔮 Predicting activities for prospective ligands...")
+        prospective_fields_selected = {
+            k: v
+            for k, v in prospective_only_fields.items()
+            if k.replace("_field", "") in FIELD_OPTIONS[fields]
+        }
+        prospective_predicted = pls_analysis.predict_prospective(
+            prospective_fields_selected
+        )
+        prospective_sdf_path = os.path.join(output_dir, "prospective_predictions.sdf")
+        from rdkit.Chem import SDWriter
+
+        writer = SDWriter(prospective_sdf_path)
+        predicted_tag = f"{sdf_activity}_predicted"
+        for (mol, _), pred_val in zip(prospective_mols, prospective_predicted):
+            mol.SetProp(predicted_tag, f"{pred_val:.6f}")
+            writer.write(mol)
+        writer.close()
+        click.echo(
+            f"✅ Prospective predictions written to {prospective_sdf_path} "
+            f"({len(prospective_mols)} molecules, property: '{predicted_tag}')"
+        )
 
     # Generate contour plots using PLS coefficients (if visualization is enabled)
     if not disable_visualization and VISUALIZATION_AVAILABLE:

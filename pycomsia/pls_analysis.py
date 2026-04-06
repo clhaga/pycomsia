@@ -59,6 +59,7 @@ class PLSAnalysis:
 
         # Optional prediction set results
         self.y_pred_unseen = None
+        self.y_mean = None
 
     def calculate_contribution_fractions(self):
         """
@@ -401,6 +402,7 @@ class PLSAnalysis:
 
         y = np.array(train_activities)
         y_mean = np.mean(y)
+        self.y_mean = y_mean  # Store for prospective predictions
         y = y - y_mean  # Mean center y
 
         # Generate indices for the entire dataset
@@ -482,6 +484,54 @@ class PLSAnalysis:
                 }
             )
             df.to_csv("predictions.csv", index=False)
+
+    def predict_prospective(self, prospective_fields):
+        """
+        Apply the fitted PLS model to a prospective (no-activity) set of molecules.
+
+        Parameters
+        ----------
+        prospective_fields : dict
+            Field arrays for prospective molecules, same keys as train_fields passed
+            to convert_fields_to_X and filtered to the same selected fields.
+            Each value is a list/array of flattened field vectors, one per molecule.
+
+        Returns
+        -------
+        np.ndarray
+            Predicted activity values (original scale, mean-centering reversed).
+        """
+        if self.pls_model is None:
+            raise ValueError("PLS model has not been fitted yet")
+        if self.y_mean is None:
+            raise ValueError("y_mean not stored; re-run fit_final_model")
+
+        X_prosp = []
+        for field_name in self.field_names:
+            prosp_data = np.array(prospective_fields[field_name])
+            if prosp_data.ndim == 1:
+                prosp_data = prosp_data.reshape(1, -1)
+
+            # Apply the same column filter used during training
+            kept_idx = self.kept_indices[field_name]
+            prosp_filtered = prosp_data[:, kept_idx]
+
+            # Apply the fitted scaler (transform only — do not refit)
+            scaler = self.scalers[field_name]
+            scaled = scaler.transform(prosp_filtered.reshape(-1, 1)).reshape(
+                prosp_filtered.shape
+            )
+
+            if len(X_prosp) == 0:
+                X_prosp = scaled
+            else:
+                X_prosp = np.hstack((X_prosp, scaled))
+
+        # Mean-center the prospective feature matrix (consistent with how X_pred is handled)
+        X_prosp = X_prosp - np.mean(X_prosp, axis=0)
+
+        y_pred = self.pls_model.predict(X_prosp).ravel()
+        return y_pred + self.y_mean  # Reverse mean-centering
 
     def plot_results(self, outputdir):
         """Generate plots for analysis results"""

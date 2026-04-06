@@ -13,4 +13,5 @@ dependencies:
   - pubchempy
   - pytest
   - cookiecutter
+  - pymol-open-source
 
