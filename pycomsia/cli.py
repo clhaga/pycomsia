@@ -260,8 +260,12 @@ def main(
     n_prospective_mols = len(prospective_mols)
     raw_pred_fields = all_field_values["pred_fields"]
     if n_predict_mols > 0 and n_prospective_mols > 0:
-        predict_only_fields = {k: v[:n_predict_mols] for k, v in raw_pred_fields.items()}
-        prospective_only_fields = {k: v[n_predict_mols:] for k, v in raw_pred_fields.items()}
+        predict_only_fields = {
+            k: v[:n_predict_mols] for k, v in raw_pred_fields.items()
+        }
+        prospective_only_fields = {
+            k: v[n_predict_mols:] for k, v in raw_pred_fields.items()
+        }
     elif n_predict_mols > 0:
         predict_only_fields = raw_pred_fields
         prospective_only_fields = None
